@@ -11,6 +11,7 @@ const StackSize = 2048
 
 var True = &object.Boolean{Value: true}
 var False = &object.Boolean{Value: false}
+var Null = &object.Null{}
 
 type VM struct {
 	constants    []object.Object
@@ -81,6 +82,26 @@ func (vm *VM) Run() error {
 			}
 		case code.OpMinus:
 			err := vm.executeMinusOperator()
+			if err != nil {
+				return err
+			}
+		case code.OpJump:
+			// first is opcode Jump, right after is jump target
+			pos := int(code.ReadUint16(vm.instructions[ip+1:]))
+			// go right before so loop iteration takes you there
+			ip = pos - 1
+		case code.OpJumpNotTruthy:
+			// decode operand, where to go next
+			pos := int(code.ReadUint16(vm.instructions[ip+1:]))
+			// skip over the two bites of the operand
+			ip += 2
+
+			condition := vm.pop()
+			if !isTruthy(condition) {
+				ip = pos - 1
+			}
+		case code.OpNull:
+			err := vm.push(Null)
 			if err != nil {
 				return err
 			}
@@ -197,6 +218,8 @@ func (vm *VM) executeBangOperator() error {
 		return vm.push(False)
 	case False:
 		return vm.push(True)
+	case Null:
+		return vm.push(True)
 	default:
 		return vm.push(False)
 	}
@@ -210,4 +233,15 @@ func (vm *VM) executeMinusOperator() error {
 
 	value := operand.(*object.Integer).Value
 	return vm.push(&object.Integer{Value: -value})
+}
+
+func isTruthy(obj object.Object) bool {
+	switch obj := obj.(type) {
+	case *object.Boolean:
+		return obj.Value
+	case *object.Null:
+		return false
+	default:
+		return true
+	}
 }
